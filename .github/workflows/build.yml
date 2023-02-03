@@ -1,0 +1,41 @@
+# This workflow will do a clean install of dependencies, and compile the typescript.
+
+name: build
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: ["14"]
+
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v1
+      with:
+        always-auth: true
+        node-version: ${{ matrix.node-version }}
+        registry-url: "https://npm.pkg.github.com"
+        scope: "@vex-chat"
+
+    - name: Setup Cache
+      uses: actions/cache@v2
+      with:
+        path: |
+          node_modules
+        key: ${{ runner.os }}-${{ hashFiles('yarn.lock') }}
+
+    - name: Install Dependencies
+      run: yarn --network-concurrency 1
+      env:
+        NODE_AUTH_TOKEN: ${{ secrets.CI_KEY }}
