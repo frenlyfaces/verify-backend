@@ -34,10 +34,14 @@ import { JsonRpcProvider } from "ethers";
 // load the environment variables
 loadEnv();
 
-const provider = new JsonRpcProvider(`https://canto.slingshot.finance`, 7700)
+const provider = new JsonRpcProvider(`https://canto.slingshot.finance`, 7700);
 const FRENLY_CONTRACT_ADDRESS = "0x020bbfC79C96c22A8677df740379ecCc0297E52C";
 
-const frenlys = new ethers.Contract(FRENLY_CONTRACT_ADDRESS, ['function balanceOf(address) external view returns (uint256)'], provider);
+const frenlys = new ethers.Contract(
+    FRENLY_CONTRACT_ADDRESS,
+    ["function balanceOf(address) external view returns (uint256)"],
+    provider
+);
 
 const minABI = [
     // balanceOf
@@ -48,9 +52,7 @@ const minABI = [
         outputs: [{ name: "balance", type: "uint256" }],
         type: "function",
     },
-
 ];
-
 
 interface DiscordUser {
     id: string;
@@ -73,14 +75,12 @@ export interface VerifyPayload {
     discordTokenType: string;
 }
 
-
-
 async function main() {
     const tokenMap = new Map<string, string>();
 
     /* initiate discord and solana connections */
     const discord = new DiscordClient({
-        intents: [Intents.FLAGS.GUILDS],
+        intents: [Intents.FLAGS.GUILDS, "GUILD_MEMBERS"],
     });
 
     /* initiate db */
@@ -91,20 +91,12 @@ async function main() {
         synchronize: true,
     });
 
-    /* discord command handlers */
-    discord.once("ready", () => {
-        log.info("Discord client logged in.");
-    });
-
-    discord.login(process.env.DISCORD_TOKEN!);
-
     /* initiate api and middleware */
     const app = express();
     app.use(cors());
     app.use(express.json());
     app.use(morgan("dev"));
     app.use(helmet());
-
 
     app.post("/token", async (req, res) => {
         const { address } = req.body as { address: string | undefined };
@@ -120,19 +112,18 @@ async function main() {
 
         setTimeout(() => {
             tokenMap.delete(address);
-        }, 60000)
+        }, 60000);
 
         res.json({
-            token: `You are signing this message to authenticate yourself as a Frenly Faces holder to access Discord. Please ensure you are only signing this message on https://frenlyfaces.xyz ${address} ${tokenToSign}`
-        })
-    })
+            token: `You are signing this message to authenticate yourself as a Frenly Faces holder to access Discord. Please ensure you are only signing this message on https://frenlyfaces.xyz ${address} ${tokenToSign}`,
+        });
+    });
 
     app.post("/verify", async (req, res) => {
         try {
             const body: VerifyPayload = req.body;
 
             const { message, signature, discordToken } = body;
-
 
             /* ensure discord ID matches with token provided */
             const discordRes = await axios.get(
@@ -146,11 +137,12 @@ async function main() {
 
             const userInfo: DiscordUser = discordRes.data;
 
-
             /* fetch guild and verified role */
             const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
             const role = await guild.roles.fetch(process.env.ROLE_ID!);
-            const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!)
+            const deleteRole = await guild.roles.fetch(
+                process.env.REMOVE_ROLE_ID!
+            );
             const member = await guild.members.fetch(userInfo.id);
 
             if (!role || !deleteRole) {
@@ -174,12 +166,14 @@ async function main() {
                 return;
             }
 
-            const frenlyBalance = Number(await frenlys.balanceOf(verifiedAddress));
+            const frenlyBalance = Number(
+                await frenlys.balanceOf(verifiedAddress)
+            );
             const signedToken = message.split(" ").pop();
             console.log();
 
             if (frenlyBalance < 1) {
-                res.sendStatus(401)
+                res.sendStatus(401);
                 return;
             }
 
@@ -206,18 +200,20 @@ async function main() {
         }
     });
 
-    const monitorHolders = async () => {
+    const verifyCultMembership = async () => {
         log.info("Checking for non-holders with verified role");
         const holders = await getRepository(Holder).find();
 
         /* fetch guild and verified role */
         const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
         const role = await guild.roles.fetch(process.env.ROLE_ID!);
-        const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!)
+        const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!);
         let deleted = 0;
 
         for (const holder of holders) {
-            const frenlyBalance = Number(await frenlys.balanceOf(holder.address));
+            const frenlyBalance = Number(
+                await frenlys.balanceOf(holder.address)
+            );
 
             if (frenlyBalance < 1) {
                 log.info("Paper hands sold, yeeting " + holder.address);
@@ -241,7 +237,7 @@ async function main() {
                 }
                 await getRepository(Holder).delete(dbEntry);
                 deleted++;
-            } 
+            }
         }
 
         log.info("Non-holder check complete. " + deleted + " holders removed.");
@@ -249,27 +245,58 @@ async function main() {
 
     const purgeNonBelievers = async () => {
         /* fetch guild and verified role */
-        const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
-        const role = await guild.roles.fetch(process.env.ROLE_ID!);
-        const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!)
+        try {
+            log.info("Purging non believers...");
+            const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
+            const role = await guild.roles.fetch(process.env.ROLE_ID!);
+            const deleteRole = await guild.roles.fetch(
+                process.env.REMOVE_ROLE_ID!
+            );
 
-        if (!role || !deleteRole) {
-            log.warn("programmer error in purge non believers, no roles found");
-            return;
+            await guild.members.fetch();
+
+            if (!role || !deleteRole) {
+                log.warn(
+                    "programmer error in purge non believers, no roles found"
+                );
+                return;
+            }
+
+            let purged = 0;
+
+            for (const member of deleteRole.members) {
+                const [discordID, guildMember] = member;
+
+                if (guildMember.joinedAt) {
+                    // if they haven't verified for ten minutes, remove them forcibly
+                    if (
+                        Date.now() - new Date(guildMember.joinedAt).getTime() >
+                        1000 * 60 * 10
+                    ) {
+                        guildMember.kick();
+                        purged++;
+                    }
+                }
+            }
+
+            log.info("Purged " + purged + " nonbelievers");
+        } catch (err) {
+            log.warn(err);
         }
+    };
 
-        const nonBelievers = await guild.members.list();
-        console.log(nonBelievers);
-
-        
-    }
-
-    // every 10m, check for non holders and yoink em as well as kick non believers
-    setTimeout(monitorHolders, 1000 * 60 * 10);
+    // every 10m, purge the unholy
+    setTimeout(verifyCultMembership, 1000 * 60 * 10);
     setTimeout(purgeNonBelievers, 1000 * 60 * 10);
 
-    monitorHolders();
-    purgeNonBelievers();
+    /* discord command handlers */
+    discord.once("ready", () => {
+        log.info("Discord client logged in.");
+        verifyCultMembership();
+        purgeNonBelievers();
+    });
+
+    discord.login(process.env.DISCORD_TOKEN!);
 
     app.listen(5353, () => {
         log.info("Express API started on port 5353");
