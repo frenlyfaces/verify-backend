@@ -247,9 +247,29 @@ async function main() {
         log.info("Non-holder check complete. " + deleted + " holders removed.");
     };
 
-    // every hour, check for non holders and yoink em
+    const purgeNonBelievers = async () => {
+        /* fetch guild and verified role */
+        const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
+        const role = await guild.roles.fetch(process.env.ROLE_ID!);
+        const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!)
+
+        if (!role || !deleteRole) {
+            log.warn("programmer error in purge non believers, no roles found");
+            return;
+        }
+
+        const nonBelievers = await guild.members.list();
+        console.log(nonBelievers);
+
+        
+    }
+
+    // every 10m, check for non holders and yoink em as well as kick non believers
     setTimeout(monitorHolders, 1000 * 60 * 10);
+    setTimeout(purgeNonBelievers, 1000 * 60 * 10);
+
     monitorHolders();
+    purgeNonBelievers();
 
     app.listen(5353, () => {
         log.info("Express API started on port 5353");
