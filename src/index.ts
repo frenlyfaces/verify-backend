@@ -210,6 +210,8 @@ async function main() {
         const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!);
         let deleted = 0;
 
+        await guild.members.fetch();
+
         for (const holder of holders) {
             const frenlyBalance = Number(
                 await frenlys.balanceOf(holder.address)
@@ -218,25 +220,46 @@ async function main() {
             if (frenlyBalance < 1) {
                 log.info("Paper hands sold, yeeting " + holder.address);
 
-                const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
+                const guildUsers = guild.members.cache.map((data) => data.id);
 
-                if (!role || !deleteRole) {
-                    log.error("Role not found");
-                    continue;
+                if (guildUsers.includes(holder.discordId)) {
+                    if (!role || !deleteRole) {
+                        log.error("Role not found");
+                        continue;
+                    }
+
+                    try {
+                        const member = await guild.members.fetch(
+                            holder.discordId
+                        );
+                        await member.fetch();
+                        await member.roles.remove(role);
+                        await member.roles.add(deleteRole);
+                        await member.kick();
+                    } catch (err) {
+                        log.warn("error with role management");
+                        log.warn(err);
+                        return;
+                    }
+                } else {
+                    log.info("User has already left discord");
                 }
 
-                const member = await guild.members.fetch(holder.discordId);
-                await member.roles.remove(role);
-                await member.roles.add(deleteRole);
+                try {
+                    const dbEntry = await getRepository(Holder).findOne(
+                        holder.discordId
+                    );
+                    if (!dbEntry) {
+                        continue;
+                    }
 
-                const dbEntry = await getRepository(Holder).findOne(
-                    holder.discordId
-                );
-                if (!dbEntry) {
-                    continue;
+                    await getRepository(Holder).delete(dbEntry);
+                    deleted++;
+                } catch (err) {
+                    log.warn("error with db mutation");
+                    log.warn(err);
+                    return;
                 }
-                await getRepository(Holder).delete(dbEntry);
-                deleted++;
             }
         }
 
@@ -286,7 +309,7 @@ async function main() {
     };
 
     // every 10m, purge the unholy
-    setTimeout(verifyCultMembership, 1000 * 60 * 10);
+    setTimeout(verifyCultMembership, 1000 * 60 * 3);
     setTimeout(purgeNonBelievers, 1000 * 60 * 10);
 
     /* discord command handlers */
