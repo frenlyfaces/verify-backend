@@ -1,79 +1,24 @@
 import log from "electron-log";
 import { loadEnv } from "./utils/loadEnv";
 import axios from "axios";
-import {
-    Client as DiscordClient,
-    Intents,
-    MessageActionRow,
-    MessageButton,
-    MessageEmbed,
-} from "discord.js";
-import {
-    Connection,
-    Connection as SolanaConnection,
-    PublicKey,
-} from "@solana/web3.js";
+import { Client as DiscordClient, Intents } from "discord.js";
 import express from "express";
 import cors from "cors";
-import { sign } from "tweetnacl";
-import { decode } from "@stablelib/base64";
 import morgan from "morgan";
 import helmet from "helmet";
-import { mintList } from "./constants/mintList";
-import {
-    createConnection,
-    Connection as DBConnection,
-    getRepository,
-} from "typeorm";
+import { createConnection, getRepository } from "typeorm";
 import path from "path";
 import { Holder } from "./entities/Holder";
 import * as uuid from "uuid";
-import { Contract, ethers } from "ethers";
-import { JsonRpcProvider } from "ethers";
+import { ethers } from "ethers";
+import { VerifyPayload } from "./types/api";
+import { nftContract } from "./constants/eth";
+import { DiscordUser } from "./types/discord";
 
 // load the environment variables
 loadEnv();
 
-const provider = new JsonRpcProvider(`https://canto.slingshot.finance`, 7700);
-const FRENLY_CONTRACT_ADDRESS = "0x020bbfC79C96c22A8677df740379ecCc0297E52C";
-
-const frenlys = new ethers.Contract(
-    FRENLY_CONTRACT_ADDRESS,
-    ["function balanceOf(address) external view returns (uint256)"],
-    provider
-);
-
-const minABI = [
-    // balanceOf
-    {
-        constant: true,
-        inputs: [{ name: "_owner", type: "address" }],
-        name: "balanceOf",
-        outputs: [{ name: "balance", type: "uint256" }],
-        type: "function",
-    },
-];
-
-interface DiscordUser {
-    id: string;
-    username: string;
-    discriminator: string;
-    avatar: string;
-    verified: boolean;
-    email: string;
-    flags: number;
-    banner: string;
-    accent_color: number;
-    premium_type: number;
-    public_flags: number;
-}
-
-export interface VerifyPayload {
-    message: string;
-    signature: string;
-    discordToken: string;
-    discordTokenType: string;
-}
+const whitelistedNoToken = ["626681739778981898"];
 
 async function main() {
     const tokenMap = new Map<string, string>();
@@ -167,7 +112,7 @@ async function main() {
             }
 
             const frenlyBalance = Number(
-                await frenlys.balanceOf(verifiedAddress)
+                await nftContract.balanceOf(verifiedAddress)
             );
             const signedToken = message.split(" ").pop();
             console.log();
@@ -213,8 +158,12 @@ async function main() {
         await guild.members.fetch();
 
         for (const holder of holders) {
+            if (whitelistedNoToken.includes(holder.discordId)) {
+                continue;
+            }
+
             const frenlyBalance = Number(
-                await frenlys.balanceOf(holder.address)
+                await nftContract.balanceOf(holder.address)
             );
 
             if (frenlyBalance < 1) {
@@ -246,9 +195,9 @@ async function main() {
                 }
 
                 try {
-                    const dbEntry = await getRepository(Holder).findOne(
-                        holder.discordId
-                    );
+                    const dbEntry = await getRepository(Holder).findOne({
+                        discordId: holder.discordId,
+                    });
                     if (!dbEntry) {
                         continue;
                     }
@@ -308,19 +257,18 @@ async function main() {
         }
     };
 
-    // every 10m, purge the unholy
-    setTimeout(verifyCultMembership, 1000 * 60 * 3);
-    setTimeout(purgeNonBelievers, 1000 * 60 * 10);
+    // unholy intervals
+    setInterval(verifyCultMembership, 1000 * 60 * 3);
+    setInterval(purgeNonBelievers, 1000 * 60 * 3);
 
-    /* discord command handlers */
     discord.once("ready", () => {
         log.info("Discord client logged in.");
         verifyCultMembership();
         purgeNonBelievers();
     });
 
+    // listen!
     discord.login(process.env.DISCORD_TOKEN!);
-
     app.listen(5353, () => {
         log.info("Express API started on port 5353");
     });
