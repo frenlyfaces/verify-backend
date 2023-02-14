@@ -233,8 +233,8 @@ async function main() {
 
     // listen!
     discord.login(process.env.DISCORD_TOKEN!);
-    app.listen(5353, () => {
-        log.info("Express API started on port 5353");
+    app.listen(Number(process.env.PORT!), () => {
+        log.info(`Express API started on port ${process.env.PORT!}`);
     });
 }
 
