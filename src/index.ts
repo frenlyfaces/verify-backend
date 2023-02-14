@@ -18,8 +18,6 @@ import { nftContract } from "./constants/eth";
 // load the environment variables
 loadEnv();
 
-const whitelistedNoToken = ["626681739778981898"];
-
 async function main() {
     const tokenMap = new Map<string, string>();
 
@@ -167,10 +165,6 @@ async function main() {
         await guild.members.fetch();
 
         for (const holder of holders) {
-            if (whitelistedNoToken.includes(holder.discordId)) {
-                continue;
-            }
-
             const frenlyBalance = Number(
                 await nftContract.balanceOf(holder.address)
             );
