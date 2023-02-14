@@ -25,6 +25,7 @@ VERIFY_URL={your verification frontend URI}
 RPC_URI={a canto RPC URI}
 CONTRACT_ADDRESS={Your NFT contract address}
 PROJECT_NAME={Your Project Name}
+PORT={your preferred API port number}
 ```
 
 -   Install the dependencies
@@ -53,7 +54,7 @@ server {
         server_name api.frenlyfaces.xyz;
 
         location / {
-                proxy_pass http://localhost:5353/;
+                proxy_pass http://localhost:{port}/;
         }
 }
 
