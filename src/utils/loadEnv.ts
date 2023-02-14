@@ -10,8 +10,10 @@ export function loadEnv(): void {
         "DISCORD_TOKEN",
         "GUILD_ID",
         "CLIENT_ID",
-        "ROLE_ID",
+        "VERIFIED_ROLE_ID",
         "VERIFY_URL",
+        "RPC_URI",
+        "CONTRACT_ADDRESS",
     ];
     for (const required of requiredEnvVars) {
         if (process.env[required] === undefined) {

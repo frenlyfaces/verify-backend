@@ -12,8 +12,8 @@ import { Holder } from "./entities/Holder";
 import * as uuid from "uuid";
 import { ethers } from "ethers";
 import { VerifyPayload } from "./types/api";
-import { nftContract } from "./constants/eth";
 import { DiscordUser } from "./types/discord";
+import { nftContract } from "./constants/eth";
 
 // load the environment variables
 loadEnv();
@@ -60,7 +60,11 @@ async function main() {
         }, 60000);
 
         res.json({
-            token: `You are signing this message to authenticate yourself as a Frenly Faces holder to access Discord. Please ensure you are only signing this message on https://frenlyfaces.xyz ${address} ${tokenToSign}`,
+            token: `You are signing this message to authenticate yourself as a ${process
+                .env
+                .PROJECT_NAME!} holder to access Discord. Please ensure you are only signing this message on ${
+                process.env.VERIFY_URL
+            } ${tokenToSign}`,
         });
     });
 
@@ -84,13 +88,12 @@ async function main() {
 
             /* fetch guild and verified role */
             const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
-            const role = await guild.roles.fetch(process.env.ROLE_ID!);
-            const deleteRole = await guild.roles.fetch(
-                process.env.REMOVE_ROLE_ID!
+            const verifiedRole = await guild.roles.fetch(
+                process.env.VERIFIED_ROLE_ID!
             );
             const member = await guild.members.fetch(userInfo.id);
 
-            if (!role || !deleteRole) {
+            if (!verifiedRole) {
                 res.sendStatus(500);
                 return;
             }
@@ -114,8 +117,14 @@ async function main() {
             const frenlyBalance = Number(
                 await nftContract.balanceOf(verifiedAddress)
             );
+
             const signedToken = message.split(" ").pop();
-            console.log();
+
+            // ensure the correct token is signed
+            if (tokenMap.get(verifiedAddress) !== signedToken) {
+                res.sendStatus(401);
+                return;
+            }
 
             if (frenlyBalance < 1) {
                 res.sendStatus(401);
@@ -135,8 +144,7 @@ async function main() {
                 res.sendStatus(500);
             }
 
-            await member.roles.add(role);
-            await member.roles.remove(deleteRole);
+            await member.roles.add(verifiedRole);
 
             res.sendStatus(200);
         } catch (err) {
@@ -145,14 +153,15 @@ async function main() {
         }
     });
 
-    const verifyCultMembership = async () => {
+    const verifyHolders = async () => {
         log.info("Checking for non-holders with verified role");
         const holders = await getRepository(Holder).find();
 
-        /* fetch guild and verified role */
+        /* fetch guild and verified verifiedRole */
         const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
-        const role = await guild.roles.fetch(process.env.ROLE_ID!);
-        const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!);
+        const verifiedRole = await guild.roles.fetch(
+            process.env.VERIFIED_ROLE_ID!
+        );
         let deleted = 0;
 
         await guild.members.fetch();
@@ -172,7 +181,7 @@ async function main() {
                 const guildUsers = guild.members.cache.map((data) => data.id);
 
                 if (guildUsers.includes(holder.discordId)) {
-                    if (!role || !deleteRole) {
+                    if (!verifiedRole) {
                         log.error("Role not found");
                         continue;
                     }
@@ -182,9 +191,7 @@ async function main() {
                             holder.discordId
                         );
                         await member.fetch();
-                        await member.roles.remove(role);
-                        await member.roles.add(deleteRole);
-                        await member.kick();
+                        await member.roles.remove(verifiedRole);
                     } catch (err) {
                         log.warn("error with role management");
                         log.warn(err);
@@ -212,59 +219,16 @@ async function main() {
             }
         }
 
-        log.info("Non-holder check complete. " + deleted + " holders removed.");
+        log.info(
+            "Non-holder check complete. " + deleted + " holders unverified."
+        );
     };
 
-    const purgeNonBelievers = async () => {
-        /* fetch guild and verified role */
-        try {
-            log.info("Purging non believers...");
-            const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
-            const role = await guild.roles.fetch(process.env.ROLE_ID!);
-            const deleteRole = await guild.roles.fetch(
-                process.env.REMOVE_ROLE_ID!
-            );
-
-            await guild.members.fetch();
-
-            if (!role || !deleteRole) {
-                log.warn(
-                    "programmer error in purge non believers, no roles found"
-                );
-                return;
-            }
-
-            let purged = 0;
-
-            for (const member of deleteRole.members) {
-                const [discordID, guildMember] = member;
-
-                if (guildMember.joinedAt) {
-                    // if they haven't verified for ten minutes, remove them forcibly
-                    if (
-                        Date.now() - new Date(guildMember.joinedAt).getTime() >
-                        1000 * 60 * 10
-                    ) {
-                        guildMember.kick();
-                        purged++;
-                    }
-                }
-            }
-
-            log.info("Purged " + purged + " nonbelievers");
-        } catch (err) {
-            log.warn(err);
-        }
-    };
-
-    // unholy intervals
-    setInterval(verifyCultMembership, 1000 * 60 * 3);
-    setInterval(purgeNonBelievers, 1000 * 60 * 3);
+    setTimeout(verifyHolders, 1000 * 60 * 3);
 
     discord.once("ready", () => {
         log.info("Discord client logged in.");
-        verifyCultMembership();
-        purgeNonBelievers();
+        verifyHolders();
     });
 
     // listen!
