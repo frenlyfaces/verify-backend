@@ -1,6 +1,6 @@
 # canto-verification-backend
 
-this repository contains the Express API / Discord bot code for Frenly Face's NFT Verification bot.
+this repository contains the Express API / Discord bot code for Frenly Face's NFT Verification bot. You'll need to set this API up as well as the serve the [frontend](https://github.com/frenlyfaces/verify-frontend).
 
 ## Setup
 
@@ -25,6 +25,7 @@ VERIFY_URL={your verification frontend URI}
 RPC_URI={a canto RPC URI}
 CONTRACT_ADDRESS={Your NFT contract address}
 PROJECT_NAME={Your Project Name}
+PORT={your preferred API port number}
 ```
 
 -   Install the dependencies
@@ -53,7 +54,7 @@ server {
         server_name api.frenlyfaces.xyz;
 
         location / {
-                proxy_pass http://localhost:5353/;
+                proxy_pass http://localhost:{port}/;
         }
 }
 
