@@ -10,7 +10,8 @@ export function loadEnv(): void {
         "DISCORD_TOKEN",
         "GUILD_ID",
         "CLIENT_ID",
-        "ROLE_ID",
+        "VERIFIED_ROLE_ID",
+        "UNVERIFIED_ROLE_ID",
         "VERIFY_URL",
     ];
     for (const required of requiredEnvVars) {

@@ -4,31 +4,19 @@ import axios from "axios";
 import {
     Client as DiscordClient,
     Intents,
-    MessageActionRow,
-    MessageButton,
-    MessageEmbed,
 } from "discord.js";
-import {
-    Connection,
-    Connection as SolanaConnection,
-    PublicKey,
-} from "@solana/web3.js";
 import express from "express";
 import cors from "cors";
-import { sign } from "tweetnacl";
-import { decode } from "@stablelib/base64";
 import morgan from "morgan";
 import helmet from "helmet";
-import { mintList } from "./constants/mintList";
 import {
     createConnection,
-    Connection as DBConnection,
     getRepository,
 } from "typeorm";
 import path from "path";
 import { Holder } from "./entities/Holder";
 import * as uuid from "uuid";
-import { Contract, ethers } from "ethers";
+import { ethers } from "ethers";
 import { JsonRpcProvider } from "ethers";
 
 // load the environment variables
@@ -139,13 +127,15 @@ async function main() {
 
             /* fetch guild and verified role */
             const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
-            const role = await guild.roles.fetch(process.env.ROLE_ID!);
-            const deleteRole = await guild.roles.fetch(
-                process.env.REMOVE_ROLE_ID!
+            const verifiedRole = await guild.roles.fetch(
+                process.env.VERIFIED_ROLE_ID!
+            );
+            const unverifiedRole = await guild.roles.fetch(
+                process.env.UNVERIFIED_ROLE_ID!
             );
             const member = await guild.members.fetch(userInfo.id);
 
-            if (!role || !deleteRole) {
+            if (!verifiedRole || !unverifiedRole) {
                 res.sendStatus(500);
                 return;
             }
@@ -190,8 +180,8 @@ async function main() {
                 res.sendStatus(500);
             }
 
-            await member.roles.add(role);
-            await member.roles.remove(deleteRole);
+            await member.roles.add(verifiedRole);
+            await member.roles.remove(unverifiedRole);
 
             res.sendStatus(200);
         } catch (err) {
@@ -200,14 +190,18 @@ async function main() {
         }
     });
 
-    const verifyCultMembership = async () => {
-        log.info("Checking for non-holders with verified role");
+    const verifyHolders = async () => {
+        log.info("Checking for non-holders with verified verifiedRole");
         const holders = await getRepository(Holder).find();
 
-        /* fetch guild and verified role */
+        /* fetch guild and verified verifiedRole */
         const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
-        const role = await guild.roles.fetch(process.env.ROLE_ID!);
-        const deleteRole = await guild.roles.fetch(process.env.REMOVE_ROLE_ID!);
+        const verifiedRole = await guild.roles.fetch(
+            process.env.VERIFIED_ROLE_ID!
+        );
+        const unverifiedRole = await guild.roles.fetch(
+            process.env.UNVERIFIED_ROLE_ID!
+        );
         let deleted = 0;
 
         await guild.members.fetch();
@@ -223,7 +217,7 @@ async function main() {
                 const guildUsers = guild.members.cache.map((data) => data.id);
 
                 if (guildUsers.includes(holder.discordId)) {
-                    if (!role || !deleteRole) {
+                    if (!verifiedRole || !unverifiedRole) {
                         log.error("Role not found");
                         continue;
                     }
@@ -233,9 +227,8 @@ async function main() {
                             holder.discordId
                         );
                         await member.fetch();
-                        await member.roles.remove(role);
-                        await member.roles.add(deleteRole);
-                        await member.kick();
+                        await member.roles.remove(verifiedRole);
+                        await member.roles.add(unverifiedRole);
                     } catch (err) {
                         log.warn("error with role management");
                         log.warn(err);
@@ -263,60 +256,18 @@ async function main() {
             }
         }
 
-        log.info("Non-holder check complete. " + deleted + " holders removed.");
-    };
-
-    const purgeNonBelievers = async () => {
-        /* fetch guild and verified role */
-        try {
-            log.info("Purging non believers...");
-            const guild = await discord.guilds.fetch(process.env.GUILD_ID!);
-            const role = await guild.roles.fetch(process.env.ROLE_ID!);
-            const deleteRole = await guild.roles.fetch(
-                process.env.REMOVE_ROLE_ID!
-            );
-
-            await guild.members.fetch();
-
-            if (!role || !deleteRole) {
-                log.warn(
-                    "programmer error in purge non believers, no roles found"
-                );
-                return;
-            }
-
-            let purged = 0;
-
-            for (const member of deleteRole.members) {
-                const [discordID, guildMember] = member;
-
-                if (guildMember.joinedAt) {
-                    // if they haven't verified for ten minutes, remove them forcibly
-                    if (
-                        Date.now() - new Date(guildMember.joinedAt).getTime() >
-                        1000 * 60 * 10
-                    ) {
-                        guildMember.kick();
-                        purged++;
-                    }
-                }
-            }
-
-            log.info("Purged " + purged + " nonbelievers");
-        } catch (err) {
-            log.warn(err);
-        }
+        log.info(
+            "Non-holder check complete. " + deleted + " holders unverified."
+        );
     };
 
     // every 10m, purge the unholy
-    setTimeout(verifyCultMembership, 1000 * 60 * 3);
-    setTimeout(purgeNonBelievers, 1000 * 60 * 10);
+    setTimeout(verifyHolders, 1000 * 60 * 3);
 
     /* discord command handlers */
     discord.once("ready", () => {
         log.info("Discord client logged in.");
-        verifyCultMembership();
-        purgeNonBelievers();
+        verifyHolders();
     });
 
     discord.login(process.env.DISCORD_TOKEN!);
