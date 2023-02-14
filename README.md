@@ -1,6 +1,6 @@
 # canto-verification-backend
 
-this repository contains the Express API / Discord bot code for Frenly Face's NFT Verification bot.
+this repository contains the Express API / Discord bot code for Frenly Face's NFT Verification bot. You'll need to set this API up as well as the serve the [frontend](https://github.com/frenlyfaces/verify-frontend).
 
 ## Setup
 
