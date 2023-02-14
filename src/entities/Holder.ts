@@ -1,11 +1,4 @@
-import {
-    Entity,
-    Column,
-    Unique,
-    PrimaryGeneratedColumn,
-    Index,
-    PrimaryColumn,
-} from "typeorm";
+import { Entity, Column, Unique, PrimaryColumn } from "typeorm";
 
 @Entity()
 @Unique(["discordId"])

@@ -1,5 +1,4 @@
-import { ethers } from "ethers";
-import { JsonRpcProvider } from "ethers";
+import { ethers, JsonRpcProvider } from "ethers";
 import { loadEnv } from "../utils/loadEnv";
 
 loadEnv();
